@@ -8,7 +8,7 @@ import com.mohiva.play.silhouette.api.repositories.AuthInfoRepository
 import com.mohiva.play.silhouette.api.services._
 import com.mohiva.play.silhouette.api.util._
 import com.mohiva.play.silhouette.api.{ Environment, EventBus, Silhouette, SilhouetteProvider }
-import com.mohiva.play.silhouette.crypto.{ JcaCookieSigner, JcaCookieSignerSettings, JcaCrypter, JcaCrypterSettings }
+import com.mohiva.play.silhouette.crypto.JcaCookieSigner
 import com.mohiva.play.silhouette.impl.authenticators._
 import com.mohiva.play.silhouette.impl.providers._
 import com.mohiva.play.silhouette.impl.providers.oauth1._
@@ -37,12 +37,14 @@ import play.api.libs.ws.WSClient
 import utils.auth.{ CustomSecuredErrorHandler, CustomUnsecuredErrorHandler, DefaultEnv }
 import com.softwaremill.macwire._
 import models.User
+
 //import play.api.libs.crypto.{ CookieSigner, CookieSignerProvider, CryptoConfig, CryptoConfigParser }
 /**
  * The Guice module which wires all Silhouette dependencies.
  */
 
 trait SilhouetteModule {
+  def environment: play.api.Environment
   def configuration: Configuration
   def defaultCacheApi: CacheApi
   def wsClient: WSClient
@@ -54,10 +56,13 @@ trait SilhouetteModule {
   def openIDInfoDAO: OpenIDInfoDAO
   def passwordInfoDAO: PasswordInfoDAO
   // def jcaCookieSigner: JcaCookieSigner
-  def crypter: Crypter
+  lazy val cryptoConfig: CryptoConfig = new CryptoConfigParser(environment, configuration).get
+
+  lazy val cookieSigner: CookieSigner = new CookieSignerProvider(cryptoConfig).get
+  val config = configuration.underlying.as[JcaCrypterSettings]("silhouette.oauth1TokenSecretProvider.crypter")
+  // lazy val jcaCrypterSettings = new JcaCrypterSettings("silhouette.oauth1TokenSecretProvider.crypter")
+  lazy val crypter = new JcaCrypter(config)
   lazy val authenticatorEncoder = new Base64AuthenticatorEncoder()
-  lazy val cookieSigner = wire[JcaCookieSigner]
-  lazy val cookieSettings = wire[JcaCookieSignerSettings]
   lazy val clock = Clock()
   lazy val eventBus = EventBus()
   lazy val fingerprintGenerator = new DefaultFingerprintGenerator(false)
@@ -105,7 +110,7 @@ trait SilhouetteModule {
   }
 
   object SilhouetteOAuth1TokenSecretProvider {
-    def apply(clock: Clock, cookieSigner: JcaCookieSigner, crypter: Crypter, configuration: Configuration): OAuth1TokenSecretProvider = {
+    def apply(clock: Clock, cookieSigner: CookieSigner, crypter: Crypter, configuration: Configuration): OAuth1TokenSecretProvider = {
       val settings = configuration.underlying.as[CookieSecretSettings]("silhouette.oauth1TokenSecretProvider")
       new CookieSecretProvider(settings, cookieSigner, crypter, clock)
     }
@@ -113,7 +118,7 @@ trait SilhouetteModule {
 
   object SilhouetteOAuth2StateProvider {
     def apply(
-      idGenerator: IDGenerator, clock: Clock, cookieSigner: JcaCookieSigner, configuration: Configuration
+      idGenerator: IDGenerator, clock: Clock, cookieSigner: CookieSigner, configuration: Configuration
     ): OAuth2StateProvider = {
       val settings = configuration.underlying.as[CookieStateSettings]("silhouette.oauth2StateProvider")
       new CookieStateProvider(settings, idGenerator, cookieSigner, clock)

@@ -10,7 +10,7 @@ import controllers._
 import models.services.UserService
 import play.api.cache.EhCacheComponents
 import play.api.http.HttpErrorHandler
-import play.api.libs.crypto.CookieSigner
+import play.api.libs.crypto.{ CookieSigner, CookieSignerProvider, CryptoConfig, CryptoConfigParser }
 //import play.api.libs.crypto.{ CookieSigner, CookieSignerProvider, CryptoConfig, CryptoConfigParser }
 import play.api.libs.openid.OpenIDComponents
 import play.api.libs.ws.WSClient
@@ -41,7 +41,9 @@ class SilhouetteLoaderComponent(context: Context) extends BuiltInComponentsFromC
   /* override lazy val cryptoConfig: CryptoConfig = new CryptoConfigParser(environment, configuration).get
   override lazy val cookieSigner: CookieSigner = new CookieSignerProvider(cryptoConfig).get*/
   lazy val routerOption = None
+  override lazy val cryptoConfig: CryptoConfig = new CryptoConfigParser(environment, configuration).get
 
+  override lazy val cookieSigner: CookieSigner = new CookieSignerProvider(cryptoConfig).get
   override lazy val httpErrorHandler: HttpErrorHandler = wire[ErrorHandler]
   override lazy val httpFilters: Seq[EssentialFilter] = filters.filters
   //  lazy val webJarAssets: WebJarAssets = wire[WebJarAssets]
