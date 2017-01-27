@@ -15,12 +15,13 @@ import net.ceedubs.ficus.Ficus._
 import play.api.Configuration
 import play.api.i18n.{ I18nSupport, Messages, MessagesApi }
 import play.api.libs.concurrent.Execution.Implicits._
-import play.api.mvc.Controller
+import play.api.libs.functional.syntax._
+import play.api.libs.json._
+import play.api.mvc.{ Action, Controller }
 import utils.auth.DefaultEnv
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 /**
  * The `Sign In` controller.
@@ -33,7 +34,6 @@ import scala.language.postfixOps
  * @param socialProviderRegistry The social provider registry.
  * @param configuration The Play configuration.
  * @param clock The clock instance.
- * @param webJarAssets The webjar assets implementation.
  */
 class SignInController(
   val messagesApi: MessagesApi,
@@ -44,56 +44,52 @@ class SignInController(
   socialProviderRegistry: SocialProviderRegistry,
   configuration: Configuration,
   clock: Clock,
-  implicit val webJarAssets: WebJarAssets)
+  implicit val webjarAssets: WebJarAssets)
   extends Controller with I18nSupport {
-
-  /**
-   * Views the `Sign In` page.
-   *
-   * @return The result to display.
-   */
   def view = silhouette.UnsecuredAction.async { implicit request =>
     Future.successful(Ok(views.html.signIn(SignInForm.form, socialProviderRegistry)))
   }
+  /**
+   * Converts the JSON into a `SignInForm.Data` object.
+   */
+  implicit val dataReads = (
+    (__ \ 'email).read[String] and
+    (__ \ 'password).read[String] and
+    (__ \ 'rememberMe).read[Boolean]
+  )(SignInForm.Data.apply _)
 
   /**
-   * Handles the submitted form.
+   * Handles the submitted JSON data.
    *
    * @return The result to display.
    */
-  def submit = silhouette.UnsecuredAction.async { implicit request =>
-    SignInForm.form.bindFromRequest.fold(
-      form => Future.successful(BadRequest(views.html.signIn(form, socialProviderRegistry))),
-      data => {
-        val credentials = Credentials(data.email, data.password)
-        credentialsProvider.authenticate(credentials).flatMap { loginInfo =>
-          val result = Redirect(routes.ApplicationController.index())
-          userService.retrieve(loginInfo).flatMap {
-            case Some(user) if !user.activated =>
-              Future.successful(Ok(views.html.activateAccount(data.email)))
-            case Some(user) =>
+  def submit = Action.async(parse.json) { implicit request =>
+    request.body.validate[SignInForm.Data].map { data =>
+      credentialsProvider.authenticate(Credentials(data.email, data.password)).flatMap { loginInfo =>
+        userService.retrieve(loginInfo).flatMap {
+          case Some(user) => silhouette.env.authenticatorService.create(loginInfo).map {
+            case authenticator if data.rememberMe =>
               val c = configuration.underlying
-              silhouette.env.authenticatorService.create(loginInfo).map {
-                case authenticator if data.rememberMe =>
-                  authenticator.copy(
-                    expirationDateTime = clock.now + c.as[FiniteDuration]("silhouette.authenticator.rememberMe.authenticatorExpiry"),
-                    idleTimeout = c.getAs[FiniteDuration]("silhouette.authenticator.rememberMe.authenticatorIdleTimeout"),
-                    cookieMaxAge = c.getAs[FiniteDuration]("silhouette.authenticator.rememberMe.cookieMaxAge")
-                  )
-                case authenticator => authenticator
-              }.flatMap { authenticator =>
-                silhouette.env.eventBus.publish(LoginEvent(user, request))
-                silhouette.env.authenticatorService.init(authenticator).flatMap { v =>
-                  silhouette.env.authenticatorService.embed(v, result)
-                }
-              }
-            case None => Future.failed(new IdentityNotFoundException("Couldn't find user"))
+              authenticator.copy(
+                expirationDateTime = clock.now + c.as[FiniteDuration]("silhouette.authenticator.rememberMe.authenticatorExpiry"),
+                idleTimeout = c.getAs[FiniteDuration]("silhouette.authenticator.rememberMe.authenticatorIdleTimeout")
+              )
+            case authenticator => authenticator
+          }.flatMap { authenticator =>
+            silhouette.env.eventBus.publish(LoginEvent(user, request))
+            silhouette.env.authenticatorService.init(authenticator).map { token =>
+              Ok(Json.obj("token" -> token))
+            }
           }
-        }.recover {
-          case e: ProviderException =>
-            Redirect(routes.SignInController.view()).flashing("error" -> Messages("invalid.credentials"))
+          case None => Future.failed(new IdentityNotFoundException("Couldn't find user"))
         }
+      }.recover {
+        case e: ProviderException =>
+          Unauthorized(Json.obj("message" -> Messages("invalid.credentials")))
       }
-    )
+    }.recoverTotal {
+      case error =>
+        Future.successful(Unauthorized(Json.obj("message" -> Messages("invalid.credentials"))))
+    }
   }
 }

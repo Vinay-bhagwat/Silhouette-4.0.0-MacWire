@@ -21,6 +21,8 @@ import play.api.Configuration
 import play.api.i18n.{ Langs, MessagesApi }
 import play.api.libs.mailer.MailerClient
 import play.api.libs.ws.WSClient
+import play.filters.csrf.{ CSRFConfig, CSRFFilter }
+import play.filters.headers.SecurityHeadersFilter
 import utils.auth.{ CustomSecuredErrorHandler, CustomUnsecuredErrorHandler, DefaultEnv }
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -33,7 +35,7 @@ trait WebAppModule {
   lazy val crypter = new JcaCrypter(config)
   def messagesApi: MessagesApi
 
-  lazy val fingerprintGenerator = new DefaultFingerprintGenerator(false)
+  // lazy val fingerprintGenerator = new DefaultFingerprintGenerator(false)
   lazy val idGenerator = new SecureRandomIDGenerator()
   lazy val encoder = new CrypterAuthenticatorEncoder(crypter)
   def configuration: Configuration
@@ -61,10 +63,10 @@ trait WebAppModule {
   lazy val userAwareAction = new DefaultUserAwareAction(new DefaultUserAwareRequestHandler)
 
   lazy val passwordDao = new PasswordInfoDAO
-  lazy val authInfoRepository = new DelegableAuthInfoRepository(passwordDao)
+  lazy val authInfoRepository = new DelegableAuthInfoRepository()
 
   lazy val passwordHasher = new BCryptPasswordHasher()
-  lazy val passwordHasherRegistry = new PasswordHasherRegistry(passwordHasher, List())
+  lazy val passwordHasherRegistry = new PasswordHasherRegistry(passwordHasher, List(passwordHasher))
   lazy val credentialsProvider = new CredentialsProvider(authInfoRepository, passwordHasherRegistry)
 
   lazy val clock = Clock()
