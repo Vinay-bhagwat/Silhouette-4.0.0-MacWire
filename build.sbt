@@ -15,7 +15,7 @@ libraryDependencies ++= Seq(
   "com.mohiva" %% "play-silhouette-password-bcrypt" % "4.0.0",
   "com.mohiva" %% "play-silhouette" % "4.0.0",
   "com.mohiva" %% "play-silhouette-persistence" % "4.0.0",
-  "com.mohiva" %% "play-silhouette-persistence-memory" % "4.0.0-BETA4",
+
   "com.mohiva" %% "play-silhouette-crypto-jca" % "4.0.0",
   "org.webjars" %% "webjars-play" % "2.5.0-2",
   "net.codingwell" %% "scala-guice" % "4.0.1",
@@ -23,7 +23,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play-mailer" % "5.0.0",
   "com.enragedginger" %% "akka-quartz-scheduler" % "1.5.0-akka-2.4.x",
   "com.adrianhurt" %% "play-bootstrap" % "1.0-P25-B3",
-  "com.mohiva" %% "play-silhouette-testkit" % "4.0.0-BETA4" % "test",
+  "com.mohiva" %% "play-silhouette-testkit" % "4.0.0" % "test",
   "com.softwaremill.macwire" %% "macros" % "2.2.5",
   "com.softwaremill.macwire" %% "runtime" % "1.0.7",
   specs2 % Test,
